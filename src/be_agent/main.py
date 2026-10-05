@@ -45,7 +45,8 @@ def create_app(settings: Settings | None = None, *, trace_exporter: Any = None) 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = create_engine(settings.database_url)
-        await init_db(engine)
+        if settings.migrate_on_startup:
+            await init_db(engine)
         async with AsyncExitStack() as stack:
             checkpointer = await _open_checkpointer(stack, settings)
             sessionmaker = create_sessionmaker(engine)

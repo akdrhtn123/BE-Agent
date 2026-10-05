@@ -220,6 +220,14 @@ DATABASE_URL=postgresql+asyncpg://agent:agent@localhost:5432/agent
 서버가 시작할 때 아직 적용 안 된 마이그레이션을 자동으로 적용한다 (`db/session.py` 의 `init_db`).
 Alembic 도입 전에 만든 DB 는 첫 버전(`0001`)으로 기록만 하고 이어서 올린다.
 
+서버를 여러 개 띄울 때는 동시에 마이그레이션하지 않도록 `MIGRATE_ON_STARTUP=false` 로 끄고, 배포 전에 한 번만 따로 돌린다 (쿠버네티스는 Job).
+운영 이미지에는 `alembic.ini` 가 없으므로 아래 모듈을 쓴다.
+
+```bash
+python -m be_agent.db.migrate           # 최신까지 올린다 (서버 시작 때와 같은 init_db)
+python -m be_agent.db.migrate --check   # 최신이면 종료 코드 0, 아니면 1 (서버가 Job 을 기다릴 때)
+```
+
 모델(`db/models.py`)을 고치면 마이그레이션 파일을 만들어 함께 커밋한다. 안 만들면 `tests/test_migrations.py` 가 실패한다.
 
 ```bash

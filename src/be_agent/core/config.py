@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
     # DB가 SQLite일 때만 사용. Postgres면 LangGraph 체크포인트도 같은 DB에 저장된다.
     checkpoint_sqlite_path: str = "./data/checkpoints.db"
+    # 서버가 시작할 때 DB 마이그레이션을 적용한다. 서버를 여러 개 띄울 때는 false 로 두고
+    # `python -m be_agent.db.migrate` 를 배포 전에 한 번만 돌린다 (쿠버네티스는 Helm hook Job)
+    migrate_on_startup: bool = True
 
     # "<provider>:<model>" 형식. fake:echo 는 API 키 없이 동작하는 개발용 모델.
     default_model: str = "fake:echo"

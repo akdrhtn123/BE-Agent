@@ -1,12 +1,17 @@
 from pathlib import Path
 
+import sqlalchemy
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from fastapi.testclient import TestClient
 from sqlalchemy import Connection, inspect, text
 
+from be_agent.core.config import Settings
+from be_agent.db.migrate import is_up_to_date, migrate
 from be_agent.db.models import Base
 from be_agent.db.session import MIGRATIONS_DIR, create_engine, include_object, init_db
+from be_agent.main import create_app
 
 
 def _head() -> str:
@@ -63,3 +68,26 @@ async def test_unknown_tables_are_left_alone(tmp_path: Path) -> None:
         assert await conn.run_sync(_diff) == []
         assert "checkpoints" in await conn.run_sync(lambda c: inspect(c).get_table_names())
     await engine.dispose()
+
+
+async def test_migrate_command_brings_db_to_head(tmp_path: Path) -> None:
+    """서버 밖에서 한 번 돌리는 마이그레이션(python -m be_agent.db.migrate)도 최신까지 올린다."""
+    url = f"sqlite+aiosqlite:///{tmp_path}/app.db"
+    assert not await is_up_to_date(url)
+    await migrate(url)
+    assert await is_up_to_date(url)
+    engine = create_engine(url)
+    async with engine.connect() as conn:
+        assert await conn.run_sync(_current) == _head()
+    await engine.dispose()
+
+
+def test_server_skips_migration_when_disabled(settings: Settings, tmp_path: Path) -> None:
+    """MIGRATE_ON_STARTUP=false 면 서버는 스키마를 건드리지 않는다 (마이그레이션은 Job 이 한다)."""
+    settings.migrate_on_startup = False
+    with TestClient(create_app(settings)):
+        pass
+    engine = sqlalchemy.create_engine(f"sqlite:///{tmp_path}/app.db")
+    with engine.connect() as conn:
+        assert "alembic_version" not in inspect(conn).get_table_names()
+    engine.dispose()
