@@ -40,7 +40,8 @@ src/be_agent/
 │   └── ai_sdk.py        # 내부 이벤트 → Vercel AI SDK UI Message Stream
 ├── tools/               # 기본 도구 + MCP 도구 로더
 ├── api/v1/              # REST API
-├── db/                  # SQLAlchemy 모델 (스레드 메타데이터)
+├── db/                  # SQLAlchemy 모델, 엔진, 시작 시 마이그레이션 적용
+├── migrations/          # Alembic 마이그레이션 (versions/ 에 변경 이력)
 └── schemas/             # 요청/응답 Pydantic 스키마
 ```
 
@@ -214,12 +215,29 @@ DATABASE_URL=postgresql+asyncpg://agent:agent@localhost:5432/agent
 
 스레드 테이블과 LangGraph 체크포인트가 같은 Postgres 에 저장된다.
 
+### DB 마이그레이션 (Alembic)
+
+서버가 시작할 때 아직 적용 안 된 마이그레이션을 자동으로 적용한다 (`db/session.py` 의 `init_db`).
+Alembic 도입 전에 만든 DB 는 첫 버전(`0001`)으로 기록만 하고 이어서 올린다.
+
+모델(`db/models.py`)을 고치면 마이그레이션 파일을 만들어 함께 커밋한다. 안 만들면 `tests/test_migrations.py` 가 실패한다.
+
+```bash
+uv run alembic revision --autogenerate -m "workflows 에 description 추가"   # versions/ 에 파일 생성 → 내용 확인
+uv run alembic upgrade head      # 서버를 띄우지 않고 적용
+uv run alembic downgrade -1      # 한 단계 되돌리기
+uv run alembic current           # 현재 DB 버전
+uv run alembic check             # 모델과 DB 차이가 없는지
+```
+
+접속 주소는 `alembic.ini` 가 아니라 `.env` 의 `DATABASE_URL` 을 쓴다.
+자동 생성은 컬럼 이름 변경을 삭제+추가로 만들기 때문에, 이름 변경·데이터 이전은 생성된 파일을 직접 고친다.
+
 ### MCP 도구 추가
 
 `mcp_servers.example.json` 을 `mcp_servers.json` 으로 복사해 수정하고 `.env` 에 `MCP_CONFIG_PATH=./mcp_servers.json` 을 설정한다.
 
 ## 다음 단계 (TODO)
 
-- Alembic 마이그레이션 (현재는 시작 시 `create_all`)
 - Human-in-the-loop: LangGraph `interrupt` ↔ AI SDK `tool-approval-request`
 - 긴 작업용 백그라운드 실행 + 재연결 가능한 스트림 (Redis)
